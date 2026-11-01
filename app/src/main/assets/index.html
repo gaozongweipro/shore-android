@@ -1,3 +1,31 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f6f7fb"><meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' 'unsafe-inline' file:; img-src 'self' data: file:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><title>上岸 · 每一步都算数</title><link rel="stylesheet" href="style.css"></head><body>
-<div class="app"><header><a class="brand" href="#home" aria-label="上岸首页"><span class="logo">↗</span><span>上岸<small>每一步，都算数</small></span></a><button class="avatar" data-go="settings" aria-label="数据与设置">···</button></header><main id="content"></main><nav id="nav" aria-label="主要导航"></nav></div><div id="toast" role="status" aria-live="polite"></div><dialog id="confirm"><div id="confirmBody"></div></dialog><script src="engine.js"></script><script src="app.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7fb">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' 'unsafe-inline' file:; img-src 'self' data: file:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>上岸</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <a class="brand" href="#home" aria-label="上岸首页"><span class="logo">↗</span><span>上岸</span></a>
+      <button class="avatar" data-go="settings" aria-label="数据与设置">···</button>
+    </header>
+    <main id="content" tabindex="-1"></main>
+  </div>
+  <nav id="nav" aria-label="主要导航">
+    <button type="button" data-go="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3Z M9 20v-7h6v7"/></svg><span>总览</span></button>
+    <button type="button" data-go="loans"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7H5a2 2 0 0 1 0-4h14v4 M3 5v14a2 2 0 0 0 2 2h15V7 M20 12h-6v5h6"/></svg><span>借款</span></button>
+    <button type="button" data-go="calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v16H4Z M8 3v4 M16 3v4 M4 10h16 M8 14h2 M14 14h2 M8 18h2"/></svg><span>月度</span></button>
+    <button type="button" data-go="plan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M7 15l5-5 4 3 5-7 M17 6h4v4"/></svg><span>计划</span></button>
+    <button type="button" data-go="more"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg><span>更多</span></button>
+  </nav>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <dialog id="confirm"><div id="confirmBody"></div></dialog>
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

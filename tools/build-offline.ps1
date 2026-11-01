@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory=$true)][string]$Apksigner,
     [Parameter(Mandatory=$true)][string]$Keystore,
     [Parameter(Mandatory=$true)][string]$StorePasswordFile,
-    [string]$FrameworkDirectory
+    [string]$FrameworkDirectory,
+    [string]$Python = 'python'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -18,10 +19,16 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'app\src\main\assets') -Destinati
 Copy-Item -LiteralPath (Join-Path $projectRoot 'app\src\main\res') -Destination $stage -Recurse -Force
 if (!$FrameworkDirectory) { $FrameworkDirectory = Join-Path $projectRoot 'build\framework' }
 $unsigned = Join-Path $outDir 'shore-unsigned.apk'
-$signed = Join-Path $outDir 'shore-android-v1.0.0.apk'
+$alignedUnsigned = Join-Path $outDir 'shore-aligned-unsigned.apk'
+$versionLine = Get-Content -LiteralPath (Join-Path $projectRoot 'offline\apktool.yml') | Where-Object { $_ -match '^  versionName:' }
+$appVersion = ($versionLine -replace '^  versionName:\s*', '').Trim()
+if ($appVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid app version' }
+$signed = Join-Path $outDir "shore-android-v$appVersion.apk"
 & $Java -jar $Apktool b $stage -p $FrameworkDirectory -o $unsigned
 if ($LASTEXITCODE -ne 0) { throw 'APK build failed' }
-& $Java -jar $Apksigner sign --ks $Keystore --ks-key-alias shore --ks-pass "file:$StorePasswordFile" --v1-signing-enabled true --v2-signing-enabled true --out $signed $unsigned
+& $Python (Join-Path $PSScriptRoot 'align-apk.py') $unsigned $alignedUnsigned
+if ($LASTEXITCODE -ne 0) { throw 'APK alignment failed' }
+& $Java -jar $Apksigner sign --ks $Keystore --ks-key-alias shore --ks-pass "file:$StorePasswordFile" --v1-signing-enabled true --v2-signing-enabled true --out $signed $alignedUnsigned
 if ($LASTEXITCODE -ne 0) { throw 'APK signing failed' }
 & $Java -jar $Apksigner verify --verbose --print-certs $signed
 if ($LASTEXITCODE -ne 0) { throw 'APK verification failed' }
