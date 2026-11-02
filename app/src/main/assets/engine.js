@@ -306,7 +306,18 @@
     const a = new Map(current.events.map(e => [e.id, e])), b = new Map(next.events.map(e => [e.id, e]));
     for (const [id, e] of a) if (b.has(id) && canonical(e) !== canonical(b.get(id))) fail('相同流水存在冲突，请保留两份备份');
     if (canonical(current) === canonical(next)) return { state: copy(current), changed: false };
-    const aInB = [...a.keys()].every(id => b.has(id)), bInA = [...b.keys()].every(id => a.has(id));
+    // Saving a plan changes the revision without appending a financial event.
+    // Event inclusion alone therefore cannot establish that a backup is a descendant.
+    function includesState(older, newer) {
+      const prefix = older.events.every((e, i) => newer.events[i] && canonical(e) === canonical(newer.events[i]));
+      const plans = older.plans.every(p => newer.plans.some(q => q.id === p.id && canonical(q) === canonical(p)));
+      const mutable = new Set(['revision','updatedAt','accounts','budget','events','plans','baselines']);
+      const metadata = Object.keys(older).every(k => mutable.has(k) || canonical(older[k]) === canonical(newer[k] ?? null));
+      const sameEvents = older.events.length === newer.events.length;
+      const finances = !sameEvents || ['accounts','budget','baselines'].every(k => canonical(older[k]) === canonical(newer[k]));
+      return prefix && plans && metadata && finances;
+    }
+    const aInB = includesState(current, next), bInA = includesState(next, current);
     if (aInB && next.revision > current.revision) return { state: next, changed: true };
     if (bInA && current.revision > next.revision) return { state: copy(current), changed: false };
     fail('两份账本包含不同修改，请分别保留后核对');
