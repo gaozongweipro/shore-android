@@ -20,11 +20,11 @@ import org.json.JSONObject;
 /** Offline-only app. No network or storage permissions are requested. */
 public class MainActivity extends Activity {
     private WebView web;
-    private String pendingBackup;
+    private volatile String pendingBackup;
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(0xfff6f7fb);
-        getWindow().setNavigationBarColor(0xffffffff);
+        getWindow().setStatusBarColor(0xfff5f3ee);
+        getWindow().setNavigationBarColor(0xfffffefc);
         getWindow().getDecorView().setSystemUiVisibility(8208);
         web = new WebView(this);
         WebSettings settings = web.getSettings();
@@ -45,8 +45,9 @@ public class MainActivity extends Activity {
         if (url.startsWith("file:///android_asset/")) return false;
         try {
             if (url.startsWith("shore://export")) {
-                pendingBackup = Uri.parse(url).getQueryParameter("data");
-                if (pendingBackup == null || pendingBackup.length() > 2000000) throw new IllegalArgumentException();
+                String inlineData = Uri.parse(url).getQueryParameter("data");
+                if (inlineData != null) pendingBackup = inlineData;
+                if (pendingBackup == null || pendingBackup.length() > 33554432) throw new IllegalArgumentException();
                 Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("application/json");
@@ -63,6 +64,11 @@ public class MainActivity extends Activity {
     }
     public void message(String text) {
         web.evaluateJavascript("window.nativeMessage(" + JSONObject.quote(text) + ")", null);
+    }
+    public boolean stageBackup(String data) {
+        if (data == null || data.getBytes(StandardCharsets.UTF_8).length > 33554432) return false;
+        pendingBackup = data;
+        return true;
     }
     @Override public void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
@@ -82,14 +88,14 @@ public class MainActivity extends Activity {
                     byte[] buffer = new byte[8192];
                     int count;
                     while ((count = in.read(buffer)) != -1) {
-                        if (bytes.size() + count > 2000000) throw new IllegalArgumentException();
+                        if (bytes.size() + count > 33554432) throw new IllegalArgumentException();
                         bytes.write(buffer, 0, count);
                     }
                     text = bytes.toString("UTF-8");
                 }
                 web.evaluateJavascript("window.receiveBackup(" + JSONObject.quote(text) + ")", null);
             }
-        } catch (Exception e) { message("文件处理失败，请使用不超过 2 MB 的有效备份。"); }
+        } catch (Exception e) { message("文件处理失败，请使用不超过 32 MB 的有效备份。"); }
     }
     @Override public void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
@@ -104,12 +110,14 @@ public class MainActivity extends Activity {
     }
     public static class NativeBridge {
         private final Activity activity;
-        public NativeBridge(Activity activity) { this.activity = activity; }
-        @JavascriptInterface public String loadState() { return activity.getSharedPreferences("shore", 0).getString("ledger", ""); }
-        @JavascriptInterface public boolean saveState(String data) {
-            if (data == null || data.length() > 2000000) return false;
-            return activity.getSharedPreferences("shore", 0).edit().putString("ledger", data).commit();
-        }
+        private final LedgerStore store;
+        public NativeBridge(Activity activity) { this.activity = activity; this.store = new LedgerStore(activity); }
+        @JavascriptInterface public String loadState() throws Exception { return store.load(0); }
+        @JavascriptInterface public String loadBackup(int offset) throws Exception { return store.load(offset); }
+        @JavascriptInterface public String loadLegacyState() { return store.legacy(); }
+        @JavascriptInterface public int getBackupCount() { return store.backupCount(); }
+        @JavascriptInterface public boolean saveState(String data) { return store.save(data); }
+        @JavascriptInterface public boolean stageBackup(String data) { return ((MainActivity) activity).stageBackup(data); }
         @JavascriptInterface public void copyText(String text) {
             ClipboardManager manager = (ClipboardManager) activity.getSystemService("clipboard");
             manager.setPrimaryClip(ClipData.newPlainText("上岸备份", text));

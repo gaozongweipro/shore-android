@@ -20,7 +20,7 @@
     invoke-virtual {v1}, Ljava/io/ByteArrayOutputStream;->size()I
     move-result v4
     add-int/2addr v4, v3
-    const v5, 0x1e8480
+    const v5, 0x2000000
     if-gt v4, v5, :bad
     const/4 v4, 0x0
     invoke-virtual {v1, v2, v4, v3}, Ljava/io/ByteArrayOutputStream;->write([BII)V

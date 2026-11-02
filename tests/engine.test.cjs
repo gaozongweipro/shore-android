@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const E=require('../app/src/main/assets/engine.js');
+const E=require('../app/src/main/assets/legacy-v3.js');
 const loan=(f={})=>E.makeLoan({kind:'existing',platform:'测试',amount:12000,months:12,mode:'equal',rate:12,day:31,interest:120,fee:20,early:true,...f});
 const state=(ls=[loan()])=>({...E.blank(),asOf:'2026-11-01',loans:ls,cash:1000000,budget:200000});
 test('金额使用分，拒绝空、非数字、负数和过大金额',()=>{assert.equal(E.cents('0.29'),29);for(const n of ['',null,-1,'x',Infinity,1e13])assert.throws(()=>E.cents(n));assert.throws(()=>E.amount(0));});

@@ -3,7 +3,7 @@
 .source "MainActivity.java"
 
 .field private web:Landroid/webkit/WebView;
-.field private pendingBackup:Ljava/lang/String;
+.field private volatile pendingBackup:Ljava/lang/String;
 
 .method public constructor <init>()V
     .locals 0
@@ -16,9 +16,9 @@
     invoke-super {p0, p1}, Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V
     invoke-virtual {p0}, Lcn/shore/ledger/MainActivity;->getWindow()Landroid/view/Window;
     move-result-object v0
-    const v1, -0x90805
+    const v1, -0xa0c12
     invoke-virtual {v0, v1}, Landroid/view/Window;->setStatusBarColor(I)V
-    const/4 v1, -0x1
+    const v1, -0x104
     invoke-virtual {v0, v1}, Landroid/view/Window;->setNavigationBarColor(I)V
     invoke-virtual {v0}, Landroid/view/Window;->getDecorView()Landroid/view/View;
     move-result-object v0
@@ -79,10 +79,13 @@
     const-string v1, "data"
     invoke-virtual {v0, v1}, Landroid/net/Uri;->getQueryParameter(Ljava/lang/String;)Ljava/lang/String;
     move-result-object v0
+    if-nez v0, :have_backup
+    iget-object v0, p0, Lcn/shore/ledger/MainActivity;->pendingBackup:Ljava/lang/String;
+    :have_backup
     if-eqz v0, :bad
     invoke-virtual {v0}, Ljava/lang/String;->length()I
     move-result v1
-    const v2, 0x1e8480
+    const v2, 0x2000000
     if-gt v1, v2, :bad
     iput-object v0, p0, Lcn/shore/ledger/MainActivity;->pendingBackup:Ljava/lang/String;
     new-instance v0, Landroid/content/Intent;
@@ -127,6 +130,23 @@
     invoke-virtual {p0, v0}, Lcn/shore/ledger/MainActivity;->message(Ljava/lang/String;)V
     :done
     const/4 v0, 0x1
+    return v0
+.end method
+
+.method public stageBackup(Ljava/lang/String;)Z
+    .locals 3
+    if-eqz p1, :bad
+    const-string v0, "UTF-8"
+    invoke-virtual {p1, v0}, Ljava/lang/String;->getBytes(Ljava/lang/String;)[B
+    move-result-object v0
+    array-length v0, v0
+    const v1, 0x2000000
+    if-gt v0, v1, :bad
+    iput-object p1, p0, Lcn/shore/ledger/MainActivity;->pendingBackup:Ljava/lang/String;
+    const/4 v0, 0x1
+    return v0
+    :bad
+    const/4 v0, 0x0
     return v0
 .end method
 
@@ -199,7 +219,7 @@
     goto :done
     :error
     move-exception v0
-    const-string v0, "文件处理失败，请使用不超过 2 MB 的有效备份。"
+    const-string v0, "文件处理失败，请使用不超过 32 MB 的有效备份。"
     invoke-virtual {p0, v0}, Lcn/shore/ledger/MainActivity;->message(Ljava/lang/String;)V
     :done
     return-void

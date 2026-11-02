@@ -1,133 +1,41 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const E = require('../app/src/main/assets/engine.js');
-
-function setup(raw = '', saveOK = true) {
-  const elements = {}, listeners = {}, windowListeners = {}, saved = [], owned = {};
-  class Element {
-    constructor(id) { this.id = id; this._html = ''; this.value = ''; this.scrollTop = 0; this.open = false; this.disabled = false; this.details = { open: false }; }
-    set innerHTML(html) {
-      this._html = html;
-      if (this.id !== 'content' && this.id !== 'confirmBody') return;
-      for (const id of owned[this.id] || []) delete elements[id];
-      owned[this.id] = [];
-      for (const m of html.matchAll(/\bid="([^"]+)"/g)) { elements[m[1]] = new Element(m[1]); owned[this.id].push(m[1]); }
-      for (const m of html.matchAll(/<textarea[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/textarea>/g)) elements[m[1]].value = m[2];
-    }
-    get innerHTML() { return this._html; }
-    showModal() { this.open = true; }
-    close() { this.open = false; }
-    closest(selector) { return selector === 'details' ? this.details : null; }
-    scrollIntoView() { this.revealed = true; }
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const E=require('../app/src/main/assets/engine.js'),Storage=require('../app/src/main/assets/storage.js'),Old=require('../app/src/main/assets/legacy-v3.js');
+function setup(raw='',saveOK=true){
+  const elements={},listeners={},windowListeners={},saved=[],owned={};let current=raw;
+  class Element{
+    constructor(id){this.id=id;this._html='';this.value='';this.scrollTop=0;this.open=false;this.disabled=false;this.classes=new Set();this.classList={add:k=>this.classes.add(k),remove:k=>this.classes.delete(k)};}
+    set innerHTML(html){this._html=html;for(const id of owned[this.id]||[])delete elements[id];owned[this.id]=[];for(const m of html.matchAll(/\bid="([^"]+)"/g)){elements[m[1]]=new Element(m[1]);owned[this.id].push(m[1]);}}
+    get innerHTML(){return this._html;}showModal(){this.open=true;}close(){this.open=false;}addEventListener(){}scrollIntoView(){}focus(){}
   }
-  for (const id of ['content', 'nav', 'toast', 'confirm', 'confirmBody']) elements[id] = new Element(id);
-  const markup = fs.readFileSync('app/src/main/assets/index.html', 'utf8').match(/<nav id="nav"[^>]*>([\s\S]*?)<\/nav>/)[1];
-  elements.nav.innerHTML = markup;
-  const buttons = [...markup.matchAll(/data-go="([^"]+)"/g)].map(m => {
-    const classes = new Set(), attrs = {};
-    return { dataset: { go: m[1] }, classes, attrs, classList: { toggle(k, on) { on ? classes.add(k) : classes.delete(k); } }, setAttribute(k, v) { attrs[k] = v; }, removeAttribute(k) { delete attrs[k]; } };
-  });
-  elements.nav.querySelectorAll = () => buttons;
-  const context = {
-    Shore: E, console, TextEncoder, location: { hash: '' }, setTimeout: () => 1, clearTimeout() {}, navigator: {},
-    ShoreNative: { loadState: () => raw, saveState: text => { if (saveOK) saved.push(text); return saveOK; }, copyText() {} },
-    document: { getElementById: id => elements[id] || null, addEventListener(t, fn) { listeners[t] = fn; } },
-    window: { addEventListener(t, fn) { windowListeners[t] = fn; }, scrollTo() { throw Error('The outer page must not scroll'); } }
-  };
-  vm.createContext(context);
-  vm.runInContext(fs.readFileSync('app/src/main/assets/app.js', 'utf8'), context);
-  return {
-    elements, saved, context, buttons, markup,
-    async click(dataset) {
-      if (dataset.action && elements.submitAction?.disabled && elements.content.innerHTML.includes('data-action="' + dataset.action + '"')) return;
-      await listeners.click({ target: { closest: () => ({ dataset }) } });
-    },
-    input(key, value, type = 'number') { listeners.input({ target: { dataset: { f: key }, value, type, tagName: 'INPUT' } }); },
-    change(key, value) { listeners.change({ target: { dataset: { f: key }, value, tagName: 'SELECT' } }); },
-    back(page) { context.location.hash = '#' + page; windowListeners.hashchange(); },
-    html: () => elements.content.innerHTML
-  };
+  for(const id of ['content','nav','toast','confirm','confirmBody'])elements[id]=new Element(id);
+  const markup=fs.readFileSync('app/src/main/assets/index.html','utf8').match(/<nav id="nav"[^>]*>([\s\S]*?)<\/nav>/)[1];elements.nav.innerHTML=markup;
+  const buttons=[...markup.matchAll(/data-go="([^"]+)"/g)].map(m=>{const classes=new Set(),attrs={};return{dataset:{go:m[1]},classes,attrs,classList:{toggle(k,on){on?classes.add(k):classes.delete(k);}},setAttribute(k,v){attrs[k]=v;},removeAttribute(k){delete attrs[k];}};});elements.nav.querySelectorAll=()=>buttons;
+  const context={Shore:E,ShoreStore:Storage,console,TextEncoder,location:{hash:''},setTimeout:()=>1,clearTimeout(){},navigator:{},
+    ShoreNative:{loadState:()=>current,saveState:text=>{if(saveOK){saved.push(text);current=text;}return saveOK;},getBackupCount:()=>0,loadLegacyState:()=>raw,copyText(){},stageBackup:()=>true},
+    document:{getElementById:id=>elements[id]||null,addEventListener(t,fn){listeners[t]=fn;}},window:{addEventListener(t,fn){windowListeners[t]=fn;}}};
+  vm.createContext(context);vm.runInContext(fs.readFileSync('app/src/main/assets/app.js','utf8'),context);
+  return{elements,saved,context,buttons,markup,html:()=>elements.content.innerHTML,
+    click(dataset){listeners.click({target:{closest:()=>({dataset})}});},
+    input(key,value,type='text'){listeners.input({target:{dataset:{f:key},value,type,tagName:'INPUT'}});},
+    change(key,value,type='select-one'){listeners.change({target:{dataset:{f:key},value,type,tagName:type==='select-one'?'SELECT':'INPUT'}});},
+    back(route){context.location.hash='#'+route;windowListeners.hashchange();}};
 }
-
-test('主要页面正常渲染，未知路由回总览', async () => {
-  const a = setup(JSON.stringify(E.demo()));
-  for (const page of ['loans', 'calendar', 'plan', 'friends', 'history', 'settings', 'more', 'borrow', 'repay', 'income', 'support', 'home']) {
-    await a.click({ go: page });
-    assert.ok(a.html().length > 100, page);
-    assert.ok(!a.html().includes('NaN'), page);
-    assert.ok(!a.html().includes('class="sub"'), page);
-  }
-  a.back('unknown');
-  assert.match(a.html(), /<h1>总览<\/h1>/);
-});
-
-test('借款表单空白时不报错，填写后可提交并保存', async () => {
-  const a = setup();
-  await a.click({ go: 'borrow' });
-  assert.equal(a.elements.submitAction.disabled, true);
-  assert.ok(!a.elements.borrowPreview.innerHTML.includes('class="error"'));
-  a.input('amount', '1000'); a.input('interest', '10');
-  assert.equal(a.elements.submitAction.disabled, false);
-  await a.click({ action: 'saveBorrow' });
-  assert.equal(a.saved.length, 1);
-  const s = E.validate(JSON.parse(a.saved[0]));
-  assert.equal(s.loans[0].p, 100000); assert.equal(s.loans[0].i, 1000); assert.equal(s.cash, 0);
-  assert.match(a.html(), /借款账本/);
-});
-
-test('原生保存失败保留表单和原账本', async () => {
-  const a = setup('', false);
-  await a.click({ go: 'income' }); a.input('amount', '2000'); await a.click({ action: 'saveIncome' });
-  assert.equal(a.saved.length, 0); assert.match(a.elements.toast.innerHTML, /保存失败/); assert.match(a.html(), /记录收入/);
-});
-
-test('损坏原账本不会被新操作自动覆盖', async () => {
-  const a = setup('{bad');
-  await a.click({ go: 'income' }); a.input('amount', '2000'); await a.click({ action: 'saveIncome' });
-  assert.equal(a.saved.length, 0); assert.match(a.elements.toast.innerHTML, /读取失败/);
-});
-
-test('返回表单恢复草稿和内容滚动位置', async () => {
-  const a = setup();
-  await a.click({ go: 'borrow' }); a.input('amount', '4321'); a.elements.content.scrollTop = 260;
-  await a.click({ go: 'income' }); a.input('amount', '999'); a.back('borrow');
-  assert.match(a.html(), /value="4321"/); assert.equal(a.elements.content.scrollTop, 260);
-});
-
-test('切换 Tab 保留导航节点并恢复各页滚动位置', async () => {
-  const a = setup(JSON.stringify(E.demo())), nav = a.elements.nav;
-  a.elements.content.scrollTop = 450;
-  await a.click({ go: 'calendar' }); assert.equal(a.elements.content.scrollTop, 0);
-  a.elements.content.scrollTop = 210;
-  await a.click({ go: 'home' }); assert.equal(a.elements.content.scrollTop, 450);
-  assert.equal(a.elements.nav, nav); assert.equal(nav.innerHTML, a.markup);
-  assert.deepEqual(a.buttons.filter(b => b.classes.has('active')).map(b => b.dataset.go), ['home']);
-  await a.click({ go: 'calendar' }); assert.equal(a.elements.content.scrollTop, 210);
-});
-
-test('再次点当前 Tab 回到顶部，输入试算不重置滚动位置', async () => {
-  const a = setup();
-  a.elements.content.scrollTop = 300; await a.click({ go: 'home' }); assert.equal(a.elements.content.scrollTop, 0);
-  await a.click({ go: 'borrow' }); a.elements.content.scrollTop = 330; a.input('amount', '1000');
-  assert.equal(a.elements.content.scrollTop, 330); assert.equal(a.elements.submitAction.disabled, false);
-});
-
-test('超出可用收入时禁用还款，修改为有效金额后恢复', async () => {
-  const s = E.demo(), a = setup(JSON.stringify(s));
-  await a.click({ go: 'repay' }); assert.equal(a.elements.submitAction.disabled, true);
-  a.input('amount', '9000'); assert.equal(a.elements.submitAction.disabled, true); assert.match(a.elements.repayPreview.innerHTML, /可用收入不足/);
-  a.input('amount', '1000'); assert.equal(a.elements.submitAction.disabled, false);
-  await a.click({ action: 'saveRepay' }); assert.equal(JSON.parse(a.saved[0]).cash, s.cash - 100000);
-});
-
-test('选择计费方式后保留金额和滚动位置', async () => {
-  const a = setup(); await a.click({ go: 'borrow' }); a.input('amount', '2000'); a.elements.content.scrollTop = 180;
-  a.change('mode', 'flat'); assert.match(a.html(), /每期费用/); assert.match(a.html(), /value="2000"/); assert.equal(a.elements.content.scrollTop, 180);
-});
-
-test('生成文本备份后展开备份区域', async () => {
-  const a = setup(JSON.stringify(E.demo())); await a.click({ go: 'settings' }); await a.click({ action: 'export' });
-  assert.equal(a.elements.transfer.details.open, true); assert.equal(a.elements.transfer.revealed, true);
-});
+function fillBorrow(a){a.click({go:'borrow'});for(const[k,v]of Object.entries({name:'我的借款',principal:'1000',periods:'2',monthlyAmount:'550',firstDate:E.addMonths(E.today(),1)}))a.input(k,v);}
+test('各页面渲染且不出现未定义数值',()=>{const a=setup(JSON.stringify(E.demo()));for(const route of ['loans','calendar','simulate','records','settings','borrow','repay','income','budget','baseline','forecast','home']){a.click({go:route});assert.ok(a.html().length>100,route);assert.doesNotMatch(a.html(),/NaN|undefined/);}a.back('unknown');assert.match(a.html(),/每一步/);});
+test('录入已有借款时不虚增本月借款',()=>{const a=setup();fillBorrow(a);assert.equal(a.elements.submitAction.disabled,false);a.click({action:'saveBorrow'});assert.equal(a.saved.length,1);const s=E.load(a.saved[0]).state;assert.equal(E.principal(s),100000);assert.equal(E.monthlyStats(s).deltaCents,0);});
+test('编辑逐期金额和本金采用用户改后的值',()=>{const a=setup();fillBorrow(a);a.click({action:'generateBills'});a.input('b.0.amount','600');a.input('b.0.principal','500');a.input('b.1.principal','500');a.click({action:'saveBorrow'});const s=E.load(a.saved[0]).state;assert.equal(s.accounts[0].bills[0].amountCents,60000);assert.equal(s.accounts[0].bills[0].principalCents,50000);});
+test('改变等额账单字段清除旧的逐期草稿',()=>{const a=setup();fillBorrow(a);a.click({action:'generateBills'});a.input('monthlyAmount','650');a.click({action:'saveBorrow'});const s=E.load(a.saved[0]).state;assert.equal(s.accounts[0].bills[0].amountCents,65000);});
+test('还款需确认并核对未知本金，单独统计利息',()=>{const s=E.demo(),a=setup(JSON.stringify(s));a.click({go:'repay'});assert.equal(a.elements.submitAction.disabled,true);a.input('amount','1000');a.input('afterPrincipal','35100');assert.equal(a.elements.submitAction.disabled,false);a.click({action:'saveRepay'});assert.equal(a.saved.length,0);a.click({action:'confirmDialog'});const n=E.load(a.saved[0]).state;assert.equal(E.principal(n),E.principal(s)-90000);assert.equal(n.events.at(-1).costCents,10000);});
+test('重复点击还款确认不产生第二笔',()=>{const a=setup(JSON.stringify(E.demo()));a.click({go:'repay'});a.input('amount','1000');a.input('afterPrincipal','35100');a.click({action:'saveRepay'});a.click({action:'confirmDialog'});a.click({action:'confirmDialog'});assert.equal(a.saved.length,1);});
+test('保存失败保留账本和录入草稿',()=>{const a=setup('',false);fillBorrow(a);a.click({action:'saveBorrow'});assert.equal(a.saved.length,0);assert.match(a.elements.toast.textContent,/保存失败/);a.click({go:'home'});a.click({go:'borrow'});assert.match(a.html(),/value="我的借款"/);assert.match(a.html(),/value="1000"/);});
+test('损坏或未来账本禁止自动创建空账本覆盖',()=>{for(const raw of ['{bad',JSON.stringify({...E.blank(),schemaVersion:99})]){const a=setup(raw);assert.match(a.html(),/原数据已保留/);a.click({go:'income'});a.input('amount','999');a.click({action:'saveIncome'});assert.equal(a.saved.length,0);assert.match(a.html(),/原数据已保留/);}});
+test('旧版自动迁移后保留所有余额及原始数据',()=>{const old=Old.demo(),a=setup(JSON.stringify(old));assert.equal(a.saved.length,1);const n=E.load(a.saved[0]).state;assert.equal(E.principal(n),Old.principal(old)+Old.human(old));assert.deepEqual(n.extensions.legacyV3.original,old);});
+test('切换Tab保留固定导航节点、滚动位置和草稿',()=>{const a=setup(JSON.stringify(E.demo())),nav=a.elements.nav;a.elements.content.scrollTop=450;a.click({go:'borrow'});a.input('principal','4321');a.elements.content.scrollTop=250;a.click({go:'income'});a.back('borrow');assert.match(a.html(),/value="4321"/);assert.equal(a.elements.content.scrollTop,250);a.click({go:'home'});assert.equal(a.elements.content.scrollTop,450);assert.equal(a.elements.nav,nav);assert.equal(nav.innerHTML,a.markup);assert.equal(a.buttons.length,4);});
+test('当前Tab再点回顶部，输入试算不重置滚动',()=>{const a=setup(JSON.stringify(E.demo()));a.elements.content.scrollTop=300;a.click({go:'home'});assert.equal(a.elements.content.scrollTop,0);a.click({go:'borrow'});a.elements.content.scrollTop=280;a.input('principal','1000');assert.equal(a.elements.content.scrollTop,280);});
+test('试算保存方案不改变本金和实际流水',()=>{const s=E.demo(),a=setup(JSON.stringify(s));a.click({go:'simulate'});for(const[k,v]of Object.entries({borrowPrincipal:'300',payment:'300',afterPrincipal:'35750',newMonthlyAmount:'110',newPeriods:'3',newName:'备用方案'}))a.input(k,v);assert.equal(a.elements.submitAction.disabled,false);assert.match(a.elements.preview.innerHTML,/增加/);a.click({action:'savePlan'});const n=E.load(a.saved[0]).state;assert.equal(E.principal(n),E.principal(s));assert.equal(n.events.length,s.events.length);assert.equal(n.plans.length,1);});
+test('试算执行借入与还款一次原子记账',()=>{const s=E.demo(),a=setup(JSON.stringify(s));a.click({go:'simulate'});for(const[k,v]of Object.entries({borrowPrincipal:'300',payment:'300',afterPrincipal:'35750',newMonthlyAmount:'110',newPeriods:'3'}))a.input(k,v);a.click({action:'recordScenario'});assert.equal(a.saved.length,0);a.click({action:'confirmDialog'});const n=E.load(a.saved[0]).state;assert.equal(n.events.length,s.events.length+1);assert.equal(n.accounts.length,s.accounts.length+1);assert.equal(E.principal(n),E.principal(s)+5000);});
+test('演示账本修改和退出均不写入个人账本',()=>{const s=E.blank(),a=setup(JSON.stringify(s));a.click({action:'demo'});a.click({go:'income'});a.input('amount','10');a.click({action:'saveIncome'});assert.equal(a.saved.length,0);a.click({action:'exitDemo'});assert.match(a.html(),/录入第一笔/);});
+test('导入先校验再确认，损坏备份不会写入',()=>{const a=setup(JSON.stringify(E.demo()));a.context.window.receiveBackup('{oops');assert.equal(a.saved.length,0);const incoming=E.blank();a.context.window.receiveBackup(E.exportBackup(incoming));assert.equal(a.saved.length,0);a.click({action:'restoreImported'});a.click({action:'confirmDialog'});assert.equal(E.load(a.saved[0]).state.id,incoming.id);});
+test('超长名称安全转义为文本',()=>{const s=E.demo();s.accounts[0].name='<img src=x onerror=alert(1)>';const a=setup(JSON.stringify(s));a.click({go:'loans'});assert.doesNotMatch(a.html(),/<img/);assert.match(a.html(),/&lt;img/);});
+test('本月记录同时展示借入、已还本金和息费',()=>{const a=setup(JSON.stringify(E.demo()));a.click({go:'records'});for(const label of ['本月本金净变化','新增借款本金','已还本金','已付利息及费用'])assert.ok(a.html().includes(label));});
+test('固定导航与安全区、减弱动画规则随包交付',()=>{const css=fs.readFileSync('app/src/main/assets/style.css','utf8');assert.match(css,/#nav\{position:fixed/);assert.match(css,/repeat\(4,minmax\(0,1fr\)\)/);assert.match(css,/prefers-reduced-motion/);assert.match(css,/safe-area-inset-bottom/);assert.match(css,/overflow-wrap:anywhere/);});
